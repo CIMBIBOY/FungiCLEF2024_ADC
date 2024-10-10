@@ -6,77 +6,99 @@ import torchvision
 import torch.nn.functional as F
 import torch
 
-path_4_3 = "data/4_3_images"
-path_4_3_2 = "data/4032x3024_images"
-path_3_2 = "data/3_2_images"
+input_folder = "data/x_train"
+output_folder = "data/train_np"
+test_folder = "data/test"
 
-path_korlap3 = "data/korlap3"
+import os
+import cv2
+import numpy as np
+import time
+import psutil  # For measuring memory usage
+import torchvision
+import torch.nn.functional as F
+import torch
 
-output_folder = "data/final_trunks"
-# output2_folder = "/Users/czimbermark/Documents/Deep_Learning/agriculture-image-processing/tree_trunk_segmentation/data/cropped_korlap3"
+def preprocess(folder_path, output_folder, save_numpy=False):
+    processed_images = []
 
-test = "/Users/czimbermark/Documents/Deep_Learning/agriculture-image-processing/tree_trunk_segmentation/data/test"
+    # Measure start time
+    start_time = time.time()
 
-def crop_and_save_images(folder_path, output_folder, target_ratio=(4000, 3000)):
+    # Initial memory usage
+    process = psutil.Process(os.getpid())
+    initial_memory = process.memory_info().rss / (1024 ** 2)  # Convert to MB
+
     for filename in os.listdir(folder_path):
         if filename.lower().endswith((".jpg", ".png", ".PNG", ".JPG")):
             img = cv2.imread(os.path.join(folder_path, filename))
             img = img.transpose(1, 0, 2)
+            print(f"Input shape: {img.shape}")
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             if img is not None:
-                cropped_img = crop(img, target_ratio)
-                scale_factor = 4000/cropped_img.shape[0] 
-                sigma = scale_factor * 0.5 
+                # Crop
+                cropped_img = crop(img, 16)
+
+                # Interpolation
+                scale_factor = 300 / cropped_img.shape[0]
+                sigma = scale_factor * 0.5
                 cropped_img = interpolate(cropped_img, 5, sigma)
                 cropped_img = cropped_img.transpose(1, 2, 0)
-                print(cropped_img.shape)
-                # downsampled_img = downsample(cropped_img)
-                # print("downsampled")
-                
-                #retransform 
+
+                # Retransform 
                 cropped_img = cv2.cvtColor(cropped_img, cv2.COLOR_RGB2BGR)
                 cropped_img = cropped_img.transpose(1, 0, 2)
-                print("retransformed")
-                # Save the cropped image to the output folder
-                output_path = os.path.join(output_folder, f"c_{filename}")
-                print(cropped_img.shape)
-                cv2.imwrite(output_path, cropped_img)
+
+                # Adding to array for saving as .npy
+                print(f"Output shape: {cropped_img.shape}")
+                processed_images.append(cropped_img)
+
+                if not save_numpy:
+                    # Save the cropped image to the output folder as individual images
+                    output_path = os.path.join(output_folder, f"c_{filename}")
+                    cv2.imwrite(output_path, cropped_img)
+                    print(f"Saved image: {output_path}")
             else:
                 print(f"Failed to read image: {filename}")
         else:
             print(f"Ignoring non-image file: {filename}")
 
-def crop(img, target_ratio=(4000, 3000)):
+    if save_numpy:
+        # Save the entire batch of processed images as a .npy file
+        processed_images = np.array(processed_images)
+        np.save(os.path.join(output_folder, 'x_train.npy'), processed_images)
+        print(f"Saved processed images as numpy array to: {os.path.join(output_folder, 'x_train.npy')}")
+
+    end_time = time.time()
+    
+    # final memory usage
+    final_memory = process.memory_info().rss / (1024 ** 2)  # to MB
+
+    # Print metrics
+    print(f"Time taken: {end_time - start_time:.2f} seconds")
+    print(f"Memory used: {final_memory - initial_memory:.2f} MB")
+
+def crop(img, crop_s = 16):
     w, h, c = img.shape
-    current_ratio = w / h  # Calculate the current aspect ratio
 
-    if current_ratio > target_ratio[0] / target_ratio[1]:
-        # Crop the width to achieve the target aspect ratio
-        crop_width = int(h * target_ratio[0] / target_ratio[1])
-        crop_start = (w - crop_width) // 2
-        cropped_img = img[crop_start:crop_start + crop_width, :, :]
-
-    else:
-        # Crop the height to achieve the target aspect ratio
-        crop_height = int(w * target_ratio[1] / target_ratio[0])
-        crop_start = (h - crop_height) // 2
-        cropped_img = img[:, crop_start:crop_start + crop_height, :]
-
-    print(cropped_img.shape)
-
-    return np.array(cropped_img)
+    # Crop x pixels from the top and bottom
+    if h > 270:
+        img = img[:, crop_s:h - crop_s, :]  
+    #print(img.shape)
+    return img
 
 def interpolate(img, kernel_size = 5, sigma = 0.1):
     img = torch.tensor(img)
+    # Blur for noise reduc
     blur = torchvision.transforms.GaussianBlur(kernel_size, sigma)
     blured_img = blur(img)
     blured_img = blured_img.transpose(0, 2)
     blured_img = blured_img.transpose(1, 2)
-    print(blured_img.shape)
-    size = [4000, 3000]
+    # print(blured_img.shape)
+    size = [300, 225]
     interpolated_img = F.interpolate(blured_img.unsqueeze(0), size, mode= "bilinear")
     interpolated_img = interpolated_img.squeeze(0)
-    print(interpolated_img.shape)
+    # print(interpolated_img.shape)
     return interpolated_img.detach().numpy()
 
 def downsample(data):
@@ -86,39 +108,33 @@ def downsample(data):
     print("Original shape: ", data.shape, "Downsampled shape: ", d2.shape)
     return np.array(d2)
 
-crop_and_save_images(path_4_3, output_folder)
-crop_and_save_images(path_4_3_2, output_folder)
-crop_and_save_images(path_3_2, output_folder)
-crop_and_save_images(path_korlap3, output_folder)
+def upsample(data):
+    d1 = cv2.pyrUp(data)
+    d2 = cv2.pyrUp(d1)
+    # d3 = cv2.pyrDown(d2)
+    print("Original shape: ", data.shape, "Downsampled shape: ", d2.shape)
+    return np.array(d2)
 
+def test_np_load(np_path):
+    images = np.load(np_path)
+    print(images.shape)
 
-from PIL import Image
-import os
-
-def crop_and_save_images(input_dir, output_dir, crop_height_start=1125, crop_height_end=1875):
-    # Create output directory if it doesn't exist
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    def visualize_images(images, num_images=2):
+        plt.figure(figsize=(6, 3))
     
-    # List all files in the input directory
-    for filename in os.listdir(input_dir):
-        if filename.endswith(".JPG") or filename.endswith(".png"):  # Add more conditions if needed
-            file_path = os.path.join(input_dir, filename)
-            with Image.open(file_path) as img:
-                # Crop the image to the desired sub-region
-                crop_box = (0, crop_height_start, 4000, crop_height_end)
-                cropped_img = img.crop(crop_box)
-                
-                # Save the cropped image to the output directory
-                output_file_path = os.path.join(output_dir, filename)
-                cropped_img.save(output_file_path)
-                print(f"Processed and saved: {output_file_path}")
+        for i in range(min(num_images, images.shape[0])):
+            plt.subplot(1, num_images, i + 1)
+            plt.imshow(images[i].astype('uint8')) 
+            plt.axis('off')
+        plt.show()
 
-# Usage
-input_directory = 'data/forest_depth'
-output_directory = 'data/final_trunk_middles_l'
-crop_and_save_images(input_directory, output_directory)
+    visualize_images(images, num_images=2)
 
-input_directory = 'data/final_trunks'
-output_directory = 'data/final_trunk_middles'
-crop_and_save_images(input_directory, output_directory)
+# ----------------------------------------------------------------------------
+
+# preprocess(test_folder, test_folder, save_numpy=True)
+# test_np_load(test_folder)
+
+preprocess(input_folder, output_folder, save_numpy=True)
+
+
