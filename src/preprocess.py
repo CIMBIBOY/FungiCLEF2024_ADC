@@ -1,7 +1,8 @@
 import os
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
+import time
+import psutil  # For measuring memory usage
 import torchvision
 import torch.nn.functional as F
 import torch
@@ -9,15 +10,6 @@ import torch
 input_folder = "data/x_train"
 output_folder = "data/train_np"
 test_folder = "data/test"
-
-import os
-import cv2
-import numpy as np
-import time
-import psutil  # For measuring memory usage
-import torchvision
-import torch.nn.functional as F
-import torch
 
 def preprocess(folder_path, output_folder, save_numpy=False):
     processed_images = []
