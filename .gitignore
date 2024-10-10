@@ -10,5 +10,7 @@ __pycache__
 *.DS_store
 
 # FOLDERS
-data/
+data/train_np/
+data/x_train/
+data/train_metadata_height.csv
 .adc/
