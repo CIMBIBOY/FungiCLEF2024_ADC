@@ -6,6 +6,7 @@ import psutil  # For measuring memory usage
 import torchvision
 import torch.nn.functional as F
 import torch
+import matplotlib.pyplot as plt
 
 input_folder = "data/x_train"
 output_folder = "data/train_np"
