@@ -1,0 +1,14 @@
+# CACHE
+__pycache__
+.idea
+
+# OTHER
+*.jpg
+*.png
+*.mat
+*.gif
+*.DS_store
+
+# FOLDERS
+.data/
+
