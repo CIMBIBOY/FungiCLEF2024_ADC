@@ -121,13 +121,14 @@ def test_np_load(np_path):
             plt.axis('off')
         plt.show()
 
-    visualize_images(images, num_images=2)
+    # visualize_images(images, num_images=2)
 
 # ----------------------------------------------------------------------------
 
-# preprocess(test_folder, test_folder, save_numpy=True)
+preprocess(test_folder, test_folder, save_numpy=False)
 # test_np_load(test_folder)
 
-preprocess(input_folder, output_folder, save_numpy=True)
+# preprocess(input_folder, output_folder, save_numpy=True)
+# test_np_load('data/train_np/x_train.npy')
 
 
