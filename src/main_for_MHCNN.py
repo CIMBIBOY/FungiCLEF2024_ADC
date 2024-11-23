@@ -1,20 +1,12 @@
 from torch.utils.data import DataLoader
 from models.MHCNN import build_model, optimize_hyperparameters
 
-
-
-
-
 train_loader = DataLoader(...)
 valid_loader = DataLoader(...)
 num_semcls = 100
 
-
-study = optimize_hyperparameters(train_loader, valid_loader, num_semcls, n_trials=50, device='cuda')
-
-
+study = optimize_hyperparameters(train_loader, valid_loader, num_semcls, n_trials=50, device='cpu')
 print("Best hyperparameters:", study.best_params)
-
 
 best_model = build_model(
     in_channels=3,
