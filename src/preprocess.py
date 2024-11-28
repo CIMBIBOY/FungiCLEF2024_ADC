@@ -21,7 +21,7 @@ def preprocess(folder_path, output_folder, save_numpy=False):
     # Initial memory usage
     process = psutil.Process(os.getpid())
     initial_memory = process.memory_info().rss / (1024 ** 2)  # Convert to MB
-
+    
     for filename in os.listdir(folder_path):
         if filename.lower().endswith((".jpg", ".png", ".PNG", ".JPG")):
             img = cv2.imread(os.path.join(folder_path, filename))
@@ -80,7 +80,7 @@ def crop(img, crop_s = 16):
     #print(img.shape)
     return img
 
-def interpolate(img, kernel_size = 5, sigma = 0.1):
+def interpolate(img, kernel_size = 5, sigma = 0.1, int_mode = "bilinear"):
     img = torch.tensor(img)
     # Blur for noise reduc
     blur = torchvision.transforms.GaussianBlur(kernel_size, sigma)
@@ -89,7 +89,7 @@ def interpolate(img, kernel_size = 5, sigma = 0.1):
     blured_img = blured_img.transpose(1, 2)
     # print(blured_img.shape)
     size = [300, 225]
-    interpolated_img = F.interpolate(blured_img.unsqueeze(0), size, mode= "bilinear")
+    interpolated_img = F.interpolate(blured_img.unsqueeze(0), size, mode= int_mode)
     interpolated_img = interpolated_img.squeeze(0)
     # print(interpolated_img.shape)
     return interpolated_img.detach().numpy()
