@@ -12,6 +12,30 @@ input_folder = "data/x_train"
 output_folder = "data/train_np"
 test_folder = "data/test"
 
+def process(img):
+    images = []
+    img = img.transpose(1, 0, 2)
+    print(f"Input shape: {img.shape}")
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    if img is not None:
+        # Crop
+        cropped_img = crop(img, 16)
+
+        # Interpolation
+        scale_factor = 300 / cropped_img.shape[0]
+        sigma = scale_factor * 0.5
+        cropped_img = interpolate(cropped_img, 5, sigma)
+        cropped_img = cropped_img.transpose(1, 2, 0)
+
+        # Retransform 
+        cropped_img = cv2.cvtColor(cropped_img, cv2.COLOR_RGB2BGR)
+        cropped_img = cropped_img.transpose(1, 0, 2)
+
+        # Adding to array for saving as .npy
+        print(f"Output shape: {cropped_img.shape}")
+        return np.array(cropped_img)
+
+
 def preprocess(folder_path, output_folder, save_numpy=False):
     processed_images = []
 
