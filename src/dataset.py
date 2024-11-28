@@ -11,8 +11,7 @@ import pandas as pd
 from PIL import Image
 from sklearn.model_selection import train_test_split
 from torchvision import transforms
-
-
+from src.preprocess import interpolate, crop
 
 class FungiDataset(Dataset):
     def __init__(self, image_dir, labels_path, train, pre_load=True, train_val_split = 0.2):
@@ -76,24 +75,43 @@ class FungiDataset(Dataset):
         # load images if pre_load is True, otherwise store image paths
         images = []
         for image_path in metadata['image_path']:
-            img_path = os.path.join(self.image_dir, image_path)
+            if image_path.lower().endswith((".jpg", ".png", ".PNG", ".JPG")):
+                img_path = cv2.imread(os.path.join(self.image_dir, image_path))
 
-            if self.pre_load:
-                img = Image.open(img_path)
+                if self.pre_load:
+                    img = img.transpose(1, 0, 2)
+                    print(f"Input shape: {img.shape}")
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    if img is not None:
+                        # Crop
+                        cropped_img = crop(img, 16)
 
-                # resize images to 224x224 
-                # TODO replace with the desired transformation
-                # I just used this so i can stack the images
-                img = transforms.Resize((224, 224))(img)
-                
-                images.append(img)
+                        # Interpolation
+                        scale_factor = 300 / cropped_img.shape[0]
+                        sigma = scale_factor * 0.5
+                        cropped_img = interpolate(cropped_img, 5, sigma)
+                        cropped_img = cropped_img.transpose(1, 2, 0)
 
-            else:
-                images.append(img_path)
+                        # Retransform 
+                        cropped_img = cv2.cvtColor(cropped_img, cv2.COLOR_RGB2BGR)
+                        cropped_img = cropped_img.transpose(1, 0, 2)
+
+                        # Adding to array for saving as .npy
+                        print(f"Output shape: {cropped_img.shape}")
+                        images.append(cropped_img)
+                        images = np.array(images)
+
+                    # resize images to 224x224 
+                    # TODO replace with the desired transformation
+                    # I just used this so i can stack the images
+                    # img = transforms.Resize((224, 224))(img)
+
+                else:
+                    images.append(img_path)
 
         # convert images and targets to tensors
         if self.pre_load:
-            images_tensor = torch.stack([transforms.ToTensor()(img) for img in images])
+            images_tensor = torch.stack([torch.from_numpy(img) for img in images])
         else:
             images_tensor = images
 
@@ -106,10 +124,10 @@ class FungiDataset(Dataset):
 
         return (train_data, train_labels) if self.train else (val_data, val_labels)
 
+    def _data_loader(self):
+        train_dataset = FungiDataset(labels_path=self.labels_path, image_dir=self.image_dir, train=True, pre_load=False)
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=False, num_workers=0)
 
-
-train_dataset = FungiDataset(labels_path=r'train_metadata.csv', image_dir=r'c:\Users\marko\Documents\egyetem\semester_5\data_analysis\hw\data', train=True, pre_load=False)
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=False, num_workers=0)
-
-val_dataset = FungiDataset(labels_path=r'train_metadata.csv', image_dir=r'c:\Users\marko\Documents\egyetem\semester_5\data_analysis\hw\data', train=False, pre_load=False)
-val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=0)
+        val_dataset = FungiDataset(labels_path=self.labels_path, image_dir=self.image_dir, train=False, pre_load=False)
+        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=0)
+        return train_loader, val_loader
