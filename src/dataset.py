@@ -48,7 +48,7 @@ class FungiDataset(Dataset):
 
         (self.data, self.targets) = self._load_from_disk()
         # Create DataLoader
-        self.loader = DataLoader(self, batch_size=batch_size, shuffle=self.train, num_workers=0, drop_last=self.train, collate_fn = fungi_collate_fn)
+        self.loader = DataLoader(self, batch_size= self.batch_size, shuffle=self.train, num_workers=0, drop_last=self.train, collate_fn = fungi_collate_fn)
 
     def __len__(self):
         return len(self.data)
