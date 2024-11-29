@@ -112,3 +112,4 @@ def plotter(model_outputs, desired_outputs, input_images, onehot_to_rgb):
 
         plt.tight_layout()
         plt.show()
+

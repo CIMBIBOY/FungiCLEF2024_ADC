@@ -12,19 +12,18 @@ input_folder = "data/x_train"
 output_folder = "data/train_np"
 test_folder = "data/test"
 
-def process(img):
-    images = []
+def process(img, crop_s = 16, interp_mode = "bilinear", out_size = [300, 225]):
     img = img.transpose(1, 0, 2)
     # print(f"Input shape: {img.shape}")
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     if img is not None:
         # Crop
-        cropped_img = crop(img, 16)
+        cropped_img = crop(img, crop_s)
 
         # Interpolation
         scale_factor = 300 / cropped_img.shape[0]
         sigma = scale_factor * 0.5
-        cropped_img = interpolate(cropped_img, 5, sigma)
+        cropped_img = interpolate(cropped_img, 5, sigma, int_mode = interp_mode, size = out_size)
         cropped_img = cropped_img.transpose(1, 2, 0)
 
         # Retransform 
@@ -104,7 +103,7 @@ def crop(img, crop_s = 16):
     #print(img.shape)
     return img
 
-def interpolate(img, kernel_size = 5, sigma = 0.1, int_mode = "bilinear"):
+def interpolate(img, kernel_size = 5, sigma = 0.1, int_mode = "bilinear", size = [300, 225]):
     img = torch.tensor(img)
     # Blur for noise reduc
     blur = torchvision.transforms.GaussianBlur(kernel_size, sigma)
@@ -112,7 +111,6 @@ def interpolate(img, kernel_size = 5, sigma = 0.1, int_mode = "bilinear"):
     blured_img = blured_img.transpose(0, 2)
     blured_img = blured_img.transpose(1, 2)
     # print(blured_img.shape)
-    size = [224, 224]
     interpolated_img = F.interpolate(blured_img.unsqueeze(0), size, mode= int_mode)
     interpolated_img = interpolated_img.squeeze(0)
     # print(interpolated_img.shape)
@@ -144,6 +142,15 @@ def test_np_load(np_path):
             plt.imshow(images[i].astype('uint8')) 
             plt.axis('off')
         plt.show()
+
+def fungi_collate_fn(batch):
+    imgs, targets, genus_targets, auxs, img_names = zip(*batch)
+    imgs = torch.stack(imgs, 0)
+    targets = torch.tensor(targets, dtype=torch.int64)
+    genus_targets = torch.tensor(genus_targets, dtype=torch.int64)
+    auxs = [torch.tensor(aux, dtype=torch.float64) for aux in auxs]
+    auxs = torch.stack(auxs, dim=0)
+    return imgs, targets, genus_targets, auxs, img_names
 
     # visualize_images(images, num_images=2)
 

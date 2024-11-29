@@ -11,10 +11,10 @@ import pandas as pd
 from PIL import Image
 from sklearn.model_selection import train_test_split
 from torchvision import transforms
-from preprocess import process
+from preprocess import process, fungi_collate_fn
 
 class FungiDataset(Dataset):
-    def __init__(self, image_dir, labels_path, train, pre_load=True, train_val_split = 0.2, batch_size = 32):
+    def __init__(self, config):
         '''
         Args:
             image_dir: directory containing the images
@@ -23,16 +23,32 @@ class FungiDataset(Dataset):
             pre_load: True if images should be loaded into memory, False otherwise
         '''
 
-        self.train = train
-        self.pre_load = pre_load
-        self.train_val_split = train_val_split
-        self.image_dir = image_dir
-        self.labels_path = labels_path
-        self.batch_size = batch_size
+        '''
+        Args:
+            config: dictionary containing all initialization parameters:
+                - image_dir: directory containing the images
+                - labels_path: path to the labels CSV file
+                - train: True if training, False if validation
+                - pre_load: True if images should be loaded into memory, False otherwise
+                - train_val_split: Fraction of data used for validation
+                - batch_size: Batch size for the DataLoader
+                - crop_height: Height for cropping images
+                - interpolate: Interpolation method
+                - out_size: Output size for resized images
+        '''
+        self.image_dir = config.get("image_dir")
+        self.labels_path = config.get("labels_path")
+        self.train = config.get("train", True)
+        self.pre_load = config.get("pre_load", True)
+        self.train_val_split = config.get("train_val_split", 0.2)
+        self.batch_size = config.get("batch_size", 32)
+        self.crop_h = config.get("crop_height", 16)
+        self.interpolate = config.get("interpolate", "bilinear")
+        self.out_size = config.get("out_size", [300, 225])
 
         (self.data, self.targets) = self._load_from_disk()
         # Create DataLoader
-        self.loader = DataLoader(self, batch_size=batch_size, shuffle=self.train, num_workers=0)
+        self.loader = DataLoader(self, batch_size=batch_size, shuffle=self.train, num_workers=0, drop_last=self.train, collate_fn = fungi_collate_fn)
 
     def __len__(self):
         return len(self.data)
@@ -43,7 +59,7 @@ class FungiDataset(Dataset):
         else:
             img_path = self.data[idx]
             img = cv2.imread(img_path)
-            np_img = process(img)
+            np_img = process(img, crop_s = self.crop_h, interp_mode = self.interpolate, out_size = self.out_size)
 
             return torch.from_numpy(np_img), self.targets[idx]
             
@@ -77,42 +93,76 @@ class FungiDataset(Dataset):
                 img_path = cv2.imread(os.path.join(self.image_dir, image_path))
 
                 if self.pre_load:
-                    images.append(process(img_path))
+                    image = process(img_path, crop_s = self.crop_h, interp_mode = self.interpolate, out_size = self.out_size)
+                    images.append(image)
 
                 else:
                     images.append(img_path)
     
         # convert images and targets to tensors
         if self.pre_load:
-            images_tensor = torch.stack([torch.from_numpy(img) for img in images])
+            images_tensor = torch.stack([torch.from_numpy(img) for img in images])[:-3]
             print(images_tensor.shape)
         else: 
             images_tensor = images
 
         targets_tensor = torch.tensor(
-            metadata[['class_id', 'poisonous']].values, dtype=torch.long
+            metadata[['class_id', 'poisonous']].values[:-3], dtype=torch.long
         )
+        print(targets_tensor.shape)
 
         # split data into training and validation sets
-        train_data, val_data, train_labels, val_labels = train_test_split(images_tensor, targets_tensor, test_size=self.train_val_split, random_state=42)
+        self.train_data, self.val_data, self.train_labels, self.val_labels = train_test_split(images_tensor, targets_tensor, test_size=self.train_val_split, random_state=42)
 
-        return (train_data, train_labels) if self.train else (val_data, val_labels)
+        return (self.train_data, self.train_labels) if self.train else (self.val_data, self.val_labels)
 
     def get_loader(self):
         ''' Return the DataLoader for this dataset. '''
         return self.loader
     
-#'''  
+    def get_data(self, train = True):
+        if train is True:
+            return self.train_data, self.train_labels
+        else: return self.val_data, self.val_labels
+
+
+'''  
 # Testing DataLoader
 
-# Create dataset for training
-train_dataset = FungiDataset(image_dir="/Users/czimbermark/Documents/Egyetem/Adatelemzes/Nagyhazi/FungiCLEF2024_ADC/data/x_train", labels_path="/Users/czimbermark/Documents/Egyetem/Adatelemzes/Nagyhazi/FungiCLEF2024_ADC/data/train_metadata_height.csv", train=True, pre_load=True, batch_size=32)
-val_dataset = 0 # Ugyanez train = 0
+config_train = {
+    "image_dir": "/Users/czimbermark/Documents/Egyetem/Adatelemzes/Nagyhazi/FungiCLEF2024_ADC/data/x_train",
+    "labels_path": "/Users/czimbermark/Documents/Egyetem/Adatelemzes/Nagyhazi/FungiCLEF2024_ADC/data/train_metadata_height.csv",
+    "train": True,
+    "pre_load": True,
+    "batch_size": 32,
+    "crop_height": 16,
+    "interpolate": "bilinear",
+    "out_size": [300, 225]
+}
+
+config_val = {
+    "image_dir": "/Users/czimbermark/Documents/Egyetem/Adatelemzes/Nagyhazi/FungiCLEF2024_ADC/data/x_train",
+    "labels_path": "/Users/czimbermark/Documents/Egyetem/Adatelemzes/Nagyhazi/FungiCLEF2024_ADC/data/train_metadata_height.csv",
+    "train": False,
+    "pre_load": True,
+    "batch_size": 32,
+    "crop_height": 16,
+    "interpolate": "bilinear",
+    "out_size": [300, 225]
+}
+
+# Initialize datasets using configuration dictionaries
+train_dataset = FungiDataset(config_train)
+print(len(train_dataset))
+
+val_dataset = FungiDataset(config_val)
+print(len(val_dataset))
+    
 # Retrieve DataLoader
 train_loader = train_dataset.get_loader()
 
 # Iterate through the DataLoader
-for batch_data, batch_targets in train_loader:
-    print(f"Batch data shape: {batch_data.shape}, Batch targets: {batch_targets}")
+# for batch_data, batch_targets in train_loader:
+   # print(f"Batch data shape: {batch_data.shape}, Batch targets: {batch_targets}")
     
 #'''
