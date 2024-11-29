@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import MultiheadAttention
-
-
+from torch.optim import Adam, lr_scheduler
+import tqdm
+import sklearn
+import numpy as np
 class HybridHead(nn.Module):
     def __init__(self, embed_dim, num_heads, ssm_dim, output_dim, dropout=0.1):
         """
@@ -122,6 +124,7 @@ class HibridMHCNN(nn.Module):
         Returns:
             dict: Output containing semantic class and binary predictions.
         """
+        x= x.permute(0, 3, 1, 2)
         # Encoder
         x = self.encoder(x)
         x = self.global_pool(x)
@@ -179,4 +182,108 @@ def build_model(in_channels, base_channels, num_layers, kernel_size, dropout_rat
     )
 
     model.to(device)
+    return model
+
+def train_model(model, train_loader, valid_loader, num_epochs, device):
+    """
+    Train the MHCNN model with hybrid heads.
+    Args:
+        model (nn.Module): MHCNN model with hybrid heads.
+        train_loader (DataLoader): DataLoader for training set.
+        valid_loader (DataLoader): DataLoader for validation set.
+        num_epochs (int): Number of epochs to train the model.
+        device (str): Device to run the model on ('cuda' or 'cpu').
+    """
+    optimizer = Adam(model.parameters(), lr=5e-3)
+    
+    
+
+    semantic_cls_criterion = nn.CrossEntropyLoss()
+    poisonous_criterion = nn.BCEWithLogitsLoss()
+    model.train()
+
+    for epoch in range(num_epochs):
+        model.eval()
+        
+        sem_outputs = []
+        sem_targets = []
+        poi_outputs = []
+        poi_targets = []
+        print("Evaluating on validation set...")
+        with torch.no_grad():
+            for i, batch in enumerate(tqdm.tqdm(valid_loader)):
+                
+
+                x = batch["image"].to(device)
+                output = model(x)
+                sem_outputs.append(output["sem_cls"].cpu().numpy())
+                sem_targets.append(batch["target_sem_cls"].numpy())
+                poi_outputs.append(output["poisonous"].cpu().numpy())
+                poi_targets.append(batch["target_poisonous"].numpy())
+                
+            print("Validation set metrics:")
+            sem_outputs = np.concatenate(sem_outputs, axis=0)
+            sem_targets = np.concatenate(sem_targets, axis=0)
+            poi_outputs = np.concatenate(poi_outputs, axis=0)
+            poi_targets = np.concatenate(poi_targets, axis=0)
+
+            if len(sem_targets.shape) > 1 and sem_targets.shape[1] > 1:
+                sem_targets = np.argmax(sem_targets, axis=1)
+
+            # Accuracy calculations
+            sem_acc = sklearn.metrics.accuracy_score(sem_targets, np.argmax(sem_outputs, axis=1))
+            poi_acc = sklearn.metrics.accuracy_score(poi_targets, np.round(poi_outputs))
+    
+            print(f"Semantic class accuracy: {sem_acc}")
+            print(f"Poisonous accuracy: {poi_acc}")
+
+        model.train()
+        for i, batch in enumerate(tqdm.tqdm(train_loader)):
+            optimizer.zero_grad()
+            
+            x= batch["image"].to(device)
+            y_sem_cls = batch["target_sem_cls"].to(device)
+            y_poisonous = batch["target_poisonous"].to(device)
+            output = model(x)
+            sem_cls_loss = semantic_cls_criterion(output["sem_cls"], y_sem_cls)
+            poisonous_loss = poisonous_criterion(output["poisonous"].squeeze(), y_poisonous.float())
+            loss = sem_cls_loss + poisonous_loss
+            loss.backward()
+            optimizer.step()
+
+            if i % 100 == 0:
+                print(f"Epoch {epoch}, Batch {i}, Loss: {loss.item()}")
+
+        # Evaluate on validation set
+        """
+        model.eval()
+        
+        sem_outputs = []
+        sem_targets = []
+        poi_outputs = []
+        poi_targets = []
+        print("Evaluating on validation set...")
+        with torch.no_grad():
+            for i, batch in enumerate(tqdm.tqdm(valid_loader)):
+                
+
+                x = batch["image"].to(device)
+                output = model(x)
+                sem_outputs.append(output["sem_cls"].cpu().numpy())
+                sem_targets.append(batch["target_sem_cls"].numpy())
+                poi_outputs.append(output["poisonous"].cpu().numpy())
+                poi_targets.append(batch["target_poisonous"].numpy())
+                
+            print("Validation set metrics:")
+            sem_outputs = np.concatenate(sem_outputs, axis=0)
+            sem_targets = np.concatenate(sem_targets, axis=0)
+            poi_outputs = np.concatenate(poi_outputs, axis=0)
+            poi_targets = np.concatenate(poi_targets, axis=0)
+            sem_acc = sklearn.metrics.accuracy_score(sem_targets, np.argmax(sem_outputs, axis=1))
+            poi_acc = sklearn.metrics.accuracy_score(poi_targets, np.round(poi_outputs))
+            print(f"Semantic class accuracy: {sem_acc}")
+            print(f"Poisonous accuracy: {poi_acc}")
+        """
+
+    print("Training complete.")
     return model
