@@ -15,7 +15,7 @@ test_folder = "data/test"
 def process(img):
     images = []
     img = img.transpose(1, 0, 2)
-    print(f"Input shape: {img.shape}")
+    # print(f"Input shape: {img.shape}")
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     if img is not None:
         # Crop
@@ -32,7 +32,7 @@ def process(img):
         cropped_img = cropped_img.transpose(1, 0, 2)
 
         # Adding to array for saving as .npy
-        print(f"Output shape: {cropped_img.shape}")
+        # print(f"Output shape: {cropped_img.shape}")
         return np.array(cropped_img)
 
 
@@ -112,7 +112,7 @@ def interpolate(img, kernel_size = 5, sigma = 0.1, int_mode = "bilinear"):
     blured_img = blured_img.transpose(0, 2)
     blured_img = blured_img.transpose(1, 2)
     # print(blured_img.shape)
-    size = [300, 225]
+    size = [224, 224]
     interpolated_img = F.interpolate(blured_img.unsqueeze(0), size, mode= int_mode)
     interpolated_img = interpolated_img.squeeze(0)
     # print(interpolated_img.shape)
@@ -149,7 +149,7 @@ def test_np_load(np_path):
 
 # ----------------------------------------------------------------------------
 
-preprocess(test_folder, test_folder, save_numpy=False)
+# preprocess(test_folder, test_folder, save_numpy=False)
 # test_np_load(test_folder)
 
 # preprocess(input_folder, output_folder, save_numpy=True)

@@ -11,10 +11,10 @@ import pandas as pd
 from PIL import Image
 from sklearn.model_selection import train_test_split
 from torchvision import transforms
-from src.preprocess import process
+from preprocess import process
 
 class FungiDataset(Dataset):
-    def __init__(self, image_dir, labels_path, train, pre_load=True, train_val_split = 0.2):
+    def __init__(self, image_dir, labels_path, train, pre_load=True, train_val_split = 0.2, batch_size = 32):
         '''
         Args:
             image_dir: directory containing the images
@@ -28,9 +28,11 @@ class FungiDataset(Dataset):
         self.train_val_split = train_val_split
         self.image_dir = image_dir
         self.labels_path = labels_path
+        self.batch_size = batch_size
 
         (self.data, self.targets) = self._load_from_disk()
-
+        # Create DataLoader
+        self.loader = DataLoader(self, batch_size=batch_size, shuffle=self.train, num_workers=0)
 
     def __len__(self):
         return len(self.data)
@@ -42,10 +44,6 @@ class FungiDataset(Dataset):
             img_path = self.data[idx]
             img = cv2.imread(img_path)
             np_img = process(img)
-        
-            # resize images to 224x224 
-            # TODO replace with the desired transformation
-            # I just used this so i can stack the images
 
             return torch.from_numpy(np_img), self.targets[idx]
             
@@ -79,13 +77,7 @@ class FungiDataset(Dataset):
                 img_path = cv2.imread(os.path.join(self.image_dir, image_path))
 
                 if self.pre_load:
-                    image = process(img_path)
-                    images.append(image)
-
-                    # resize images to 224x224 
-                    # TODO replace with the desired transformation
-                    # I just used this so i can stack the images
-                    # img = transforms.Resize((224, 224))(img)
+                    images.append(process(img_path))
 
                 else:
                     images.append(img_path)
@@ -93,7 +85,8 @@ class FungiDataset(Dataset):
         # convert images and targets to tensors
         if self.pre_load:
             images_tensor = torch.stack([torch.from_numpy(img) for img in images])
-        else:
+            print(images_tensor.shape)
+        else: 
             images_tensor = images
 
         targets_tensor = torch.tensor(
@@ -105,10 +98,21 @@ class FungiDataset(Dataset):
 
         return (train_data, train_labels) if self.train else (val_data, val_labels)
 
-    def _data_loader(self):
-        train_dataset = FungiDataset(labels_path=self.labels_path, image_dir=self.image_dir, train=True, pre_load=False)
-        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=False, num_workers=0)
+    def get_loader(self):
+        ''' Return the DataLoader for this dataset. '''
+        return self.loader
+    
+#'''  
+# Testing DataLoader
 
-        val_dataset = FungiDataset(labels_path=self.labels_path, image_dir=self.image_dir, train=False, pre_load=False)
-        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=0)
-        return train_loader, val_loader
+# Create dataset for training
+train_dataset = FungiDataset(image_dir="/Users/czimbermark/Documents/Egyetem/Adatelemzes/Nagyhazi/FungiCLEF2024_ADC/data/x_train", labels_path="/Users/czimbermark/Documents/Egyetem/Adatelemzes/Nagyhazi/FungiCLEF2024_ADC/data/train_metadata_height.csv", train=True, pre_load=True, batch_size=32)
+val_dataset = 0 # Ugyanez train = 0
+# Retrieve DataLoader
+train_loader = train_dataset.get_loader()
+
+# Iterate through the DataLoader
+for batch_data, batch_targets in train_loader:
+    print(f"Batch data shape: {batch_data.shape}, Batch targets: {batch_targets}")
+    
+#'''

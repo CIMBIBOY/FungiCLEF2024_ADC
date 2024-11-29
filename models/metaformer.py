@@ -12,7 +12,7 @@ from src.dataset import FungiDataset
 def main():
     # Path to pretrained weights and data directory
     pretrained_weights = "model_data/metafg_0_21k_224.pth"
-    data_dir = "./data/x_train"  # Update this to your dataset path
+    data_dir = "./data/x_train"  
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Define the MetaFormer model
