@@ -92,14 +92,14 @@ class FungiDataset(Dataset):
         
                 img_processed = process(img, crop_s=self.crop_h, interp_mode=self.interpolate, out_size=self.out_size)
                 # Convert image to tensor and float32
-                image = torch.from_numpy(img).float()
+                image = torch.from_numpy(img_processed).float()
                 image = image.permute(2, 0, 1)
 
                 # Normalize using ImageNet mean and std
                 mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
                 std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
                 image = (image - mean) / std
-                self.images.append(img_processed)
+                self.images.append(image)
         else:
             self.images = None  # Images will be loaded in __getitem__
 
@@ -117,20 +117,20 @@ class FungiDataset(Dataset):
                 raise ValueError(f"Image at {img_path} could not be read.")
             image = process(img, crop_s=self.crop_h, interp_mode=self.interpolate, out_size=self.out_size)
 
-        # Convert image to tensor and float32
-        image = torch.from_numpy(image).float()
-        image = image.permute(2, 0, 1)
+            # Convert image to tensor and float32
+            image = torch.from_numpy(image).float()
+            image = image.permute(2, 0, 1)
 
-        # Normalize using ImageNet mean and std
-        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-        image = (image - mean) / std
+            # Normalize using ImageNet mean and std
+            mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+            std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+            image = (image - mean) / std
 
-        '''
-        print(image.shape)
-        print(f"Image dtype: {image.dtype}")  # Should be torch.float32
-        print(f"Image min: {image.min()}, max: {image.max()}")  # Should be within expected range
-        '''
+            '''
+            print(image.shape)
+            print(f"Image dtype: {image.dtype}")  # Should be torch.float32
+            print(f"Image min: {image.min()}, max: {image.max()}")  # Should be within expected range
+            '''
         
         # labels
         class_id = self.class_ids[idx]
