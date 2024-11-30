@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 from models.HibridMHCNN import build_model , train_model
-from src.fungidataset import build_dataset
+from datasets.fungidataset import build_dataset
 
 IMAGEDIR = "/Users/koksziszdave/Downloads/fungi_images"
 LABELDIR = "/Users/koksziszdave/Downloads/fungi_train_metadata.csv"
@@ -32,11 +32,11 @@ best_model = build_model(
 )
 """
 device = 'cpu'
-model = build_model(in_channels=3, base_channels=16, num_layers=6, kernel_size=3, dropout_rate=0.5, num_semcls=num_semcls, device=device)
+model = build_model(in_channels=3, base_channels=16, num_layers=4, kernel_size=3, dropout_rate=0.5, num_semcls=num_semcls, device=device)
 
 
 # Train the model
-trained_model=train_model(model, train_loader, valid_loader, num_epochs=1, device=device)
+trained_model=train_model(model, train_loader, valid_loader, num_epochs=30, device=device)
 
 # Save the trained model
 torch.save(trained_model.state_dict(), "hibrid_model.pth")

@@ -203,6 +203,25 @@ def train_model(model, train_loader, valid_loader, num_epochs, device):
     model.train()
 
     for epoch in range(num_epochs):
+
+        model.train()
+        for i, batch in enumerate(tqdm.tqdm(train_loader)):
+            optimizer.zero_grad()
+            
+            x= batch["image"].to(device)
+            y_sem_cls = batch["target_sem_cls"].to(device)
+            y_poisonous = batch["target_poisonous"].to(device)
+            output = model(x)
+            sem_cls_loss = semantic_cls_criterion(output["sem_cls"], y_sem_cls)
+            poisonous_loss = poisonous_criterion(output["poisonous"].squeeze(), y_poisonous.float())
+            loss = sem_cls_loss + poisonous_loss
+            loss.backward()
+            optimizer.step()
+
+            if i % 100 == 0:
+                print(f"Epoch {epoch}, Batch {i}, Loss: {loss.item()}")
+
+        # Evaluate on validation set
         model.eval()
         
         sem_outputs = []
@@ -236,54 +255,6 @@ def train_model(model, train_loader, valid_loader, num_epochs, device):
     
             print(f"Semantic class accuracy: {sem_acc}")
             print(f"Poisonous accuracy: {poi_acc}")
-
-        model.train()
-        for i, batch in enumerate(tqdm.tqdm(train_loader)):
-            optimizer.zero_grad()
-            
-            x= batch["image"].to(device)
-            y_sem_cls = batch["target_sem_cls"].to(device)
-            y_poisonous = batch["target_poisonous"].to(device)
-            output = model(x)
-            sem_cls_loss = semantic_cls_criterion(output["sem_cls"], y_sem_cls)
-            poisonous_loss = poisonous_criterion(output["poisonous"].squeeze(), y_poisonous.float())
-            loss = sem_cls_loss + poisonous_loss
-            loss.backward()
-            optimizer.step()
-
-            if i % 100 == 0:
-                print(f"Epoch {epoch}, Batch {i}, Loss: {loss.item()}")
-
-        # Evaluate on validation set
-        """
-        model.eval()
-        
-        sem_outputs = []
-        sem_targets = []
-        poi_outputs = []
-        poi_targets = []
-        print("Evaluating on validation set...")
-        with torch.no_grad():
-            for i, batch in enumerate(tqdm.tqdm(valid_loader)):
-                
-
-                x = batch["image"].to(device)
-                output = model(x)
-                sem_outputs.append(output["sem_cls"].cpu().numpy())
-                sem_targets.append(batch["target_sem_cls"].numpy())
-                poi_outputs.append(output["poisonous"].cpu().numpy())
-                poi_targets.append(batch["target_poisonous"].numpy())
-                
-            print("Validation set metrics:")
-            sem_outputs = np.concatenate(sem_outputs, axis=0)
-            sem_targets = np.concatenate(sem_targets, axis=0)
-            poi_outputs = np.concatenate(poi_outputs, axis=0)
-            poi_targets = np.concatenate(poi_targets, axis=0)
-            sem_acc = sklearn.metrics.accuracy_score(sem_targets, np.argmax(sem_outputs, axis=1))
-            poi_acc = sklearn.metrics.accuracy_score(poi_targets, np.round(poi_outputs))
-            print(f"Semantic class accuracy: {sem_acc}")
-            print(f"Poisonous accuracy: {poi_acc}")
-        """
 
     print("Training complete.")
     return model
