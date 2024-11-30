@@ -11,7 +11,7 @@ import pandas as pd
 from PIL import Image
 from sklearn.model_selection import train_test_split
 from torchvision import transforms
-from preprocess import process, fungi_collate_fn
+from src.preprocess import process, fungi_collate_fn
 
 class FungiDataset(Dataset):
     def __init__(self, config):
@@ -48,20 +48,24 @@ class FungiDataset(Dataset):
 
         (self.data, self.targets) = self._load_from_disk()
         # Create DataLoader
-        self.loader = DataLoader(self, batch_size= self.batch_size, shuffle=self.train, num_workers=0, drop_last=self.train, collate_fn = fungi_collate_fn)
+        self.loader = DataLoader(self, batch_size= self.batch_size, shuffle=self.train, num_workers=0, drop_last=self.train) # collate_fn = fungi_collate_fn
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
         if self.pre_load:
-            return self.data[idx], self.targets[idx]
+            image = self.data[idx]
+            toxicity = self.targets[idx, 1]  # Select toxicity (poisonous or edible)
+            img_name = self.targets[idx, 0].split("/")[-1]  # Extract image name (if stored as path)
+            return image, toxicity, img_name
         else:
             img_path = self.data[idx]
             img = cv2.imread(img_path)
-            np_img = process(img, crop_s = self.crop_h, interp_mode = self.interpolate, out_size = self.out_size)
-
-            return torch.from_numpy(np_img), self.targets[idx]
+            np_img = process(img, crop_s=self.crop_h, interp_mode=self.interpolate, out_size=self.out_size)
+            toxicity = self.targets[idx, 1]  # Select toxicity (poisonous or edible)
+            img_name = img_path.split("/")[-1]  # Extract image name
+            return torch.from_numpy(np_img), toxicity, img_name
             
 
     def _load_from_disk(self):
@@ -110,6 +114,8 @@ class FungiDataset(Dataset):
             metadata[['class_id', 'poisonous']].values[:-3], dtype=torch.long
         )
         print(targets_tensor.shape)
+
+        images_tensor.permute(0, 3, 1, 2)
 
         # split data into training and validation sets
         self.train_data, self.val_data, self.train_labels, self.val_labels = train_test_split(images_tensor, targets_tensor, test_size=self.train_val_split, random_state=42)

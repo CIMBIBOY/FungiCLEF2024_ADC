@@ -144,15 +144,14 @@ def test_np_load(np_path):
         plt.show()
 
 def fungi_collate_fn(batch):
-    imgs, targets, genus_targets, auxs, img_names = zip(*batch)
+    # Unpack the batch into individual elements
+    imgs, targets, img_names = zip(*batch)
+    # Stack the image tensors into a batch (shape: [batch_size, C, H, W])
     imgs = torch.stack(imgs, 0)
+    # Convert targets (toxicity labels) to a tensor (shape: [batch_size])
     targets = torch.tensor(targets, dtype=torch.int64)
-    genus_targets = torch.tensor(genus_targets, dtype=torch.int64)
-    auxs = [torch.tensor(aux, dtype=torch.float64) for aux in auxs]
-    auxs = torch.stack(auxs, dim=0)
-    return imgs, targets, genus_targets, auxs, img_names
-
-    # visualize_images(images, num_images=2)
+    # Return only images, targets, and optionally the image names
+    return imgs, targets, img_names
 
 # ----------------------------------------------------------------------------
 
