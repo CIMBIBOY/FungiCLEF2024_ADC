@@ -14,7 +14,7 @@ from torchvision import transforms
 from src.preprocess import process
 
 class FungiDataset(Dataset):
-    def __init__(self, image_dir, labels_path, train, pre_load=True,augment=False ,train_val_split = 0.2, batch_size = 32):
+    def __init__(self, image_dir, labels_path, train, pre_load=True, augment=False ,train_val_split = 0.2, batch_size = 32):
         '''
         Args:
             image_dir: directory containing the images
@@ -29,13 +29,30 @@ class FungiDataset(Dataset):
         self.image_dir = image_dir
         self.labels_path = labels_path
         self.batch_size = batch_size
-
+        self.augment = augment
+        self.transform = self.get_transform()
         (self.data, self.targets) = self._load_data()
+        
         # Create DataLoader
         self.loader = DataLoader(self, batch_size=batch_size, shuffle=self.train, num_workers=0)
 
     def __len__(self):
         return len(self.data)
+    
+    def get_transform(self):
+        if self.augment:
+            return transforms.Compose([
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomRotation(20),
+                transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                transforms.ToTensor()
+            ])
+        else:
+            return transforms.Compose([
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                transforms.ToTensor()
+            ])
 
     def __getitem__(self, idx):
         if self.pre_load:
@@ -56,6 +73,8 @@ class FungiDataset(Dataset):
             # Crop the image
             np_img = process(img)
             image = torch.from_numpy(np_img).float()
+            # Normalize the data
+            image = image / 255.0
             target = self.targets[idx]
 
             dict = {
@@ -99,6 +118,8 @@ class FungiDataset(Dataset):
         if self.pre_load:
             if self.train:
                 train_data = self._load_from_disk(train_data_image_path)
+                #Normalize the data
+
             else:
                 val_data = self._load_from_disk(val_data_image_path)
 
@@ -133,6 +154,10 @@ class FungiDataset(Dataset):
 
         images_tensor = torch.stack([torch.from_numpy(img) for img in images])
         print(images_tensor.shape)
+        # Normalize the data
+        images_tensor = images_tensor / 255.0
+
+
 
         return images_tensor
 
