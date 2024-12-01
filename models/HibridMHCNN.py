@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import MultiheadAttention
-
-
+from torchvision import models
+from torch import optim
+import tqdm
+import numpy as np
 class HybridHead(nn.Module):
     def __init__(self, embed_dim, num_heads, ssm_dim, output_dim, dropout=0.1):
         """
@@ -68,6 +70,7 @@ class HibridMHCNN(nn.Module):
                  embed_dim=128,
                  num_heads=4,
                  ssm_dim=64,
+                 resnet=True,
                  device='cuda'):
         """
         Implements MHCNN with hybrid heads for semantic class prediction and binary classification.
@@ -86,21 +89,29 @@ class HibridMHCNN(nn.Module):
         """
         super(HibridMHCNN, self).__init__()
         self.device = device
-
+        self.resnet = resnet
         # Encoder: Convolutional feature extractor
-        layers = []
-        current_channels = in_channels
-        for i in range(num_layers):
-            layers.append(nn.Conv2d(current_channels, base_channels * (2 ** i), kernel_size, padding='same'))
-            layers.append(nn.ReLU())
-            layers.append(nn.BatchNorm2d(base_channels * (2 ** i)))
-            layers.append(nn.MaxPool2d(kernel_size=2))
-            current_channels = base_channels * (2 ** i)
-        self.encoder = nn.Sequential(*layers)
+        if self.resnet:
+            self.encoder = nn.Sequential(*list(models.resnet50(pretrained=True).children())[:-2])
+            current_channels = 2048
 
-        # Global pooling to reduce spatial dimensions
-        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.flatten = nn.Flatten()
+            # Global pooling to reduce spatial dimensions
+            self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+            self.flatten = nn.Flatten()
+        else:
+            layers = []
+            current_channels = in_channels
+            for i in range(num_layers):
+                layers.append(nn.Conv2d(current_channels, base_channels * (2 ** i), kernel_size, padding='same'))
+                layers.append(nn.ReLU())
+                layers.append(nn.BatchNorm2d(base_channels * (2 ** i)))
+                layers.append(nn.MaxPool2d(kernel_size=2))
+                current_channels = base_channels * (2 ** i)
+            self.encoder = nn.Sequential(*layers)
+
+            # Global pooling to reduce spatial dimensions
+            self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+            self.flatten = nn.Flatten()
 
         # Hybrid Heads
         self.sem_cls_head = HybridHead(embed_dim=embed_dim, num_heads=num_heads, ssm_dim=ssm_dim,
@@ -122,6 +133,7 @@ class HibridMHCNN(nn.Module):
         Returns:
             dict: Output containing semantic class and binary predictions.
         """
+        x= x.permute(0, 3, 1, 2)
         # Encoder
         x = self.encoder(x)
         x = self.global_pool(x)
@@ -179,4 +191,129 @@ def build_model(in_channels, base_channels, num_layers, kernel_size, dropout_rat
     )
 
     model.to(device)
+    return model
+
+
+
+import torch
+import torch.nn as nn
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from sklearn.metrics import accuracy_score
+import tqdm
+import numpy as np
+
+def train_model(model, train_loader, valid_loader, num_epochs, device, save_path="./models/checkpoints/resnetHMH.pth", patience=5):
+    """
+    Train the model with advanced features like LR scheduling, early stopping, and checkpointing.
+    
+    Args:
+        model (nn.Module): Model to train.
+        train_loader (DataLoader): DataLoader for training data.
+        valid_loader (DataLoader): DataLoader for validation data.
+        num_epochs (int): Number of epochs to train.
+        device (str): Device to train on ('cuda' or 'cpu').
+        save_path (str): Path to save the best model checkpoint.
+        patience (int): Number of epochs to wait for improvement before early stopping.
+    """
+    # Define loss functions
+    semantic_cls_criterion = nn.CrossEntropyLoss()
+    poisonous_criterion = nn.BCEWithLogitsLoss()
+    
+    # Optimizer and scheduler
+    optimizer = optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+    scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs)
+
+    # Early stopping variables
+    best_val_loss = float('inf')
+    patience_counter = 0
+
+    # Training loop
+    for epoch in range(num_epochs):
+        model.train()
+        running_loss = 0.0
+        for batch in tqdm.tqdm(train_loader, desc=f"Training Epoch {epoch + 1}/{num_epochs}"):
+            optimizer.zero_grad()
+
+            x = batch["image"].to(device)
+            y_sem_cls = batch["target_sem_cls"].to(device)
+            y_poisonous = batch["target_poisonous"].to(device)
+
+            # Forward pass
+            output = model(x)
+            sem_cls_loss = semantic_cls_criterion(output["sem_cls"], y_sem_cls)
+            poisonous_loss = poisonous_criterion(output["poisonous"].squeeze(), y_poisonous.float())
+            loss = sem_cls_loss + poisonous_loss
+
+            # Backward pass
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+
+        # Adjust learning rate
+        scheduler.step()
+
+        # Log training loss
+        avg_train_loss = running_loss / len(train_loader)
+        print(f"Epoch {epoch + 1}, Average Training Loss: {avg_train_loss:.4f}")
+
+        # Evaluate on validation set
+        model.eval()
+        val_loss = 0.0
+        sem_outputs, sem_targets = [], []
+        poi_outputs, poi_targets = []
+
+        with torch.no_grad():
+            for batch in tqdm.tqdm(valid_loader, desc="Validating"):
+                x = batch["image"].to(device)
+                y_sem_cls = batch["target_sem_cls"].to(device)
+                y_poisonous = batch["target_poisonous"].to(device)
+
+                output = model(x)
+                sem_cls_loss = semantic_cls_criterion(output["sem_cls"], y_sem_cls)
+                poisonous_loss = poisonous_criterion(output["poisonous"].squeeze(), y_poisonous.float())
+                loss = sem_cls_loss + poisonous_loss
+
+                val_loss += loss.item()
+
+                # Collect predictions and targets
+                sem_outputs.append(output["sem_cls"].cpu().numpy())
+                sem_targets.append(y_sem_cls.cpu().numpy())
+                poi_outputs.append(output["poisonous"].cpu().numpy())
+                poi_targets.append(y_poisonous.cpu().numpy())
+
+        # Calculate average validation loss
+        avg_val_loss = val_loss / len(valid_loader)
+        print(f"Epoch {epoch + 1}, Average Validation Loss: {avg_val_loss:.4f}")
+
+        # Flatten and process outputs for accuracy calculations
+        sem_outputs = np.concatenate(sem_outputs, axis=0)
+        sem_targets = np.concatenate(sem_targets, axis=0)
+        poi_outputs = np.concatenate(poi_outputs, axis=0)
+        poi_targets = np.concatenate(poi_targets, axis=0)
+
+        if len(sem_targets.shape) > 1 and sem_targets.shape[1] > 1:
+            sem_targets = np.argmax(sem_targets, axis=1)
+
+        sem_acc = accuracy_score(sem_targets, np.argmax(sem_outputs, axis=1))
+        poi_acc = accuracy_score(poi_targets, np.round(poi_outputs))
+
+        print(f"Semantic Class Accuracy: {sem_acc:.4f}")
+        print(f"Poisonous Accuracy: {poi_acc:.4f}")
+
+        # Early stopping and checkpointing
+        if avg_val_loss < best_val_loss:
+            print(f"Validation loss improved from {best_val_loss:.4f} to {avg_val_loss:.4f}. Saving model...")
+            best_val_loss = avg_val_loss
+            patience_counter = 0
+            torch.save(model.state_dict(), save_path)
+        else:
+            patience_counter += 1
+            print(f"No improvement in validation loss. Patience counter: {patience_counter}/{patience}")
+
+        if patience_counter >= patience:
+            print("Early stopping triggered.")
+            break
+
+    print("Training complete. Best model saved to:", save_path)
     return model
