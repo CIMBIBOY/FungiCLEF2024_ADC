@@ -45,6 +45,7 @@ class FungiDataset(Dataset):
         self.interpolate = interpolate
         self.out_size = out_size
         self.transform = transform
+        self.load_num = 0
 
         # Load metadata
         metadata = pd.read_csv(self.labels_path)
@@ -100,6 +101,9 @@ class FungiDataset(Dataset):
                 std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
                 image = (image - mean) / std
                 self.images.append(image)
+                self.load_num += 1
+                if self.load_num / 3 == 0:
+                  print(f"{self.load_num / 1000} images loaded")
         else:
             self.images = None  # Images will be loaded in __getitem__
 
@@ -112,19 +116,20 @@ class FungiDataset(Dataset):
         else:
             img_name = self.image_paths[idx]
             img_path = os.path.join(self.image_dir, img_name)
+
             img = cv2.imread(img_path)
             if img is None:
                 raise ValueError(f"Image at {img_path} could not be read.")
-            image = process(img, crop_s=self.crop_h, interp_mode=self.interpolate, out_size=self.out_size)
+                
+            image_processed = process(img, crop_s=self.crop_h, interp_mode=self.interpolate, out_size=self.out_size)
 
             # Convert image to tensor and float32
-            image = torch.from_numpy(image).float()
-            image = image.permute(2, 0, 1)
+            img_tensor = torch.from_numpy(image_processed).float().permute(2, 0, 1)
 
             # Normalize using ImageNet mean and std
             mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
             std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-            image = (image - mean) / std
+            image = (img_tensor - mean) / std
 
             '''
             print(image.shape)
@@ -136,8 +141,6 @@ class FungiDataset(Dataset):
         class_id = self.class_ids[idx]
         toxicity = self.toxicities[idx]
 
-        # image name
-        img_name = self.image_paths[idx]
-
         return image, (class_id, toxicity), img_name
+    
     
