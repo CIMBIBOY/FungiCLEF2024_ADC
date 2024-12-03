@@ -70,6 +70,7 @@ class MHCNN(nn.Module):
         )
 
     def forward(self, x):
+        x= x.permute(0,3,1,2)
         x = self.encoder(x)
         x = self.global_pool(x)
         x = self.flatten(x)
@@ -249,7 +250,7 @@ def objective(trial, train_loader, valid_loader, num_semcls, device='cuda'):
     )
 
     # Define optimizer and early stopper
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     early_stopper = EarlyStopper(patience=5, min_delta=0.01)
 
     # Training loop
@@ -258,17 +259,23 @@ def objective(trial, train_loader, valid_loader, num_semcls, device='cuda'):
         model.train()
         train_loss = 0
         for batch in train_loader:
-            inputs, targets = batch
-            inputs, targets = inputs.to(device), {k: v.to(device) for k, v in targets.items()}
-
             optimizer.zero_grad()
-            outputs = model(inputs)
 
-            loss = F.cross_entropy(outputs["sem_cls_head"], targets["sem_cls"]) + \
-                   F.binary_cross_entropy_with_logits(outputs["poisonous_head"], targets["poisonous"].unsqueeze(1))
+            x = batch["image"].to(device)
+            y_sem_cls = batch["target_sem_cls"].to(device)
+            y_poisonous = batch["target_poisonous"].to(device)
+
+            # Forward pass
+            output = model(x)
+            sem_cls_loss = F.cross_entropy(output["sem_cls"], y_sem_cls)
+            poisonous_loss = F.binary_cross_entropy(output["poisonous"].squeeze(), y_poisonous.float())
+            loss = sem_cls_loss + poisonous_loss
+
+            # Backward pass
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
+            break
 
         # Evaluate on validation data
         valid_loss = model.evaluate(valid_loader)

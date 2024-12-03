@@ -77,13 +77,12 @@ class FungiDataset(Dataset):
             image = image / 255.0
             target = self.targets[idx]
 
-            dict = {
-                    "image": image, 
-                    "target_sem_cls": target[:-1], 
-                    "target_poisonous": target[-1]
-                    }
+           
             
-            return dict
+                  
+                    
+            
+            return image,(target[:-1],target[-1])
             
             
     def _load_data(self):
