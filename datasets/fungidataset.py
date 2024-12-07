@@ -117,7 +117,6 @@ class FungiDataset(Dataset):
         if self.pre_load:
             if self.train:
                 train_data = self._load_from_disk(train_data_image_path)
-                #Normalize the data
 
             else:
                 val_data = self._load_from_disk(val_data_image_path)
@@ -182,7 +181,6 @@ class FungiDataset(Dataset):
 def build_dataset(args):
     train_dataset = FungiDataset(image_dir=args["image_dir"], labels_path=args["labels_path"], train=True, pre_load=args["pre_load"], batch_size=args["batch_size"])
     val_dataset =  FungiDataset(image_dir=args["image_dir"], labels_path=args["labels_path"], train=False, pre_load=args["pre_load"], batch_size=args["batch_size"])
-    # Retrieve DataLoader
     train_loader = train_dataset.get_loader()
     valid_loader = val_dataset.get_loader()
     return train_loader, valid_loader

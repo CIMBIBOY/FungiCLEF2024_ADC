@@ -204,8 +204,6 @@ import numpy as np
 
 def train_model(model, train_loader, valid_loader, num_epochs, device, save_path="./models/checkpoints/resnetHMH.pth", patience=5):
     """
-    Train the model with advanced features like LR scheduling, early stopping, and checkpointing.
-    
     Args:
         model (nn.Module): Model to train.
         train_loader (DataLoader): DataLoader for training data.
